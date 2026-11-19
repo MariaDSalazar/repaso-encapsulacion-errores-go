@@ -14,7 +14,8 @@ let E = null, G = null, ocupado = false, respondiendo = false, sel = null, idUni
 
 /* ---------------- estado guardado ---------------- */
 // cola: preguntas que faltan en el nivel (la primera es la del dulce «?») · hechas: respondidas bien · primer: acierto al primer intento
-const nuevo = (nombre = '', apellido = '') => ({ nombre, apellido, nivel: 1, cola: [...J.orden[1]], hechas: [], primer: {}, puntos: 0, movs: 0, completo: false });
+// vistas: temas cuya mini lección ya se mostró
+const nuevo = (nombre = '', apellido = '') => ({ nombre, apellido, nivel: 1, cola: [...J.orden[1]], hechas: [], primer: {}, vistas: [], puntos: 0, movs: 0, completo: false });
 function cargar() {
   try { return { ...nuevo(), ...JSON.parse(localStorage.getItem(CLAVE)) }; } catch { return nuevo(); }
 }
@@ -104,7 +105,8 @@ function inicio() {
     <div class="card">${registro}</div>
     <div class="card"><h2>${ICONO.ayuda} Cómo se juega</h2>
       <p>Toca un dulce y luego uno de al lado para cambiarlos de lugar (en el celular también puedes deslizarlo). Si quedan <b>3 o más dulces iguales</b> en fila o en columna, desaparecen y caen otros.</p>
-      <p>Un dulce lleva el signo <b>?</b>. Cuando entra en una combinación, sale una <b>pregunta</b>. Si aciertas, ganas puntos y explota una fila entera. Si fallas, verás una pista y esa pregunta volverá más tarde.</p>
+      <p>Un dulce lleva el signo <b>?</b>. Cuando entra en una combinación, sale una <b>pregunta</b>. Cada tema empieza con una <b>mini lección</b>; luego viene una pregunta de <b>teoría</b> y un reto de <b>práctica</b>: completas un programa y <b>Go lo ejecuta de verdad</b> en la consola.</p>
+      <p>Si aciertas, ganas puntos y explota una fila entera. Si fallas, verás una pista (y, en la práctica, lo que Go responde con tu código) y esa pregunta volverá más tarde.</p>
       <p>Hay <b>2 niveles</b> de ${POR_NIVEL} preguntas: el nivel 1 es la semana 9 y el nivel 2 la semana 10. Al terminar recibes tu <b>certificado</b>. Si no encuentras la jugada, usa el botón <b>Pista</b>. Tu progreso se guarda en este dispositivo.</p></div>`);
   if (E.nombre) {
     $('#seguir').onclick = E.completo ? certificado : juego;
@@ -284,7 +286,7 @@ async function intercambiar(a, b) {
   E.movs++;
   const pid = await cascada(m);
   guardar(); hud();
-  if (pid) { pregunta(pid); return; }          // ocupado sigue en true hasta cerrar la pregunta
+  if (pid) { reto(pid); return; }              // ocupado sigue en true hasta cerrar la pregunta
   asegurar(); ocupado = false; esperarPista();
 }
 function tocar(p) {
@@ -359,16 +361,66 @@ function hud() {
   const j = $('.jugador'); if (j) j.lastChild.textContent = `Nivel ${E.nivel} · ${E.hechas.length} de ${TOTAL} preguntas`;
 }
 
-/* ---------------- una pregunta ---------------- */
+/* ---------------- mini lección, pregunta de teoría y reto de práctica ---------------- */
+// la primera vez que sale un tema, antes de su pregunta se muestra la mini lección (la misma idea de la presentación)
+function reto(id) {
+  const q = Q[id];
+  if (E.vistas.includes(q.tema)) { pregunta(id); return; }
+  const L = J.lecciones[q.tema];
+  abrirDlg(`<span class="chip">${ICONO.estrella} Aprende · ${esc(q.tema)}</span>
+      <h3 class="pregunta" id="dlg-titulo">${esc(q.tema)}</h3>
+      <div class="gd-leccion"><p>${L.idea}</p><pre class="go">${resaltar(L.codigo)}</pre>
+      <p class="gd-real"><b>En el mundo real:</b> ${L.real}</p></div>`,
+    `<button class="btn grande" id="aprendi">¡Entendido! Ir a la pregunta ${ICONO.sig}</button>`);
+  $('#aprendi').onclick = () => { E.vistas.push(q.tema); guardar(); pregunta(id); };
+  $('#aprendi').focus();
+}
+const HUECO = '____';
+const codigoDe = op => op === '(nada)' ? '' : op;
 function pregunta(id) {
-  const q = Q[id], codigo = q.codigo ? `<pre class="go">${resaltar(q.codigo)}</pre>` : '';
-  const mono = q.cod || q.codigo;
-  abrirDlg(`<span class="chip">${esc(q.tema)}</span> <span class="gd-cuantas">Nivel ${E.nivel} · pregunta ${hechasNivel() + 1} de ${POR_NIVEL}</span>
-      <h3 class="pregunta" id="dlg-titulo">${q.enunciado}</h3>${codigo}
-      <div class="opciones">${q.opciones.map((o, i) => `<button class="op${mono ? ' cod' : ''}" data-i="${i}">${esc(o)}</button>`).join('')}</div>
+  const q = Q[id], practica = q.tipo === 'practica';
+  const codigo = practica ? `<pre class="go" id="gd-codigo">${resaltar(q.codigo).replace(HUECO, '<span class="gd-hueco" id="gd-hueco">____</span>')}</pre>` : '';
+  const meta = practica ? `<p class="gd-meta"><b>Meta:</b> el programa debe imprimir</p><pre class="gd-salida-meta">${esc(q.meta)}</pre>` : '';
+  abrirDlg(`<span class="chip${practica ? ' gd-chip-practica' : ''}">${practica ? 'Práctica' : 'Teoría'} · ${esc(q.tema)}</span> <span class="gd-cuantas">Nivel ${E.nivel} · pregunta ${hechasNivel() + 1} de ${POR_NIVEL}</span>
+      <h3 class="pregunta" id="dlg-titulo">${q.enunciado}</h3>${codigo}${meta}
+      ${practica ? '<p class="gd-meta"><b>Elige lo que va en el espacio:</b></p>' : ''}
+      <div class="opciones">${q.opciones.map((o, i) => `<button class="op${practica ? ' cod' : ''}" data-i="${i}">${esc(o)}</button>`).join('')}</div>
       <div id="retro"></div>`, '');
   $$('#dlg .op').forEach(b => { b.onclick = () => responder(q, b); });
   $$('#dlg .op')[0].focus();
+}
+
+/* ---------------- consola: el programa se ejecuta de verdad en el Go Playground (Go 1.27) ---------------- */
+async function ejecutarGo(fuente) {
+  const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), 12000);
+  try {
+    const r = await fetch('https://play.golang.org/compile', { method: 'POST', signal: ctl.signal,
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ version: '2', body: fuente, withVet: 'false' }).toString() });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const j = await r.json();
+    if (j.Errors) return { compila: false, texto: j.Errors.trim().replace(/\t/g, '    ') };
+    // la ruta del servidor (/tmp/sandbox123/src/prog.go) se acorta a prog.go
+    const texto = (j.Events || []).map(ev => ev.Message).join('').replace(/\n$/, '').replace(/\/tmp\/sandbox\d+\/src\//g, '').replace(/\t/g, '    ');
+    return { compila: true, texto, codigoSalida: j.Status };
+  } catch { return null; } finally { clearTimeout(t); }
+}
+async function consola(fuente, guardada) {
+  const z = $('#gd-consola'); if (!z) return;
+  z.innerHTML = `<div class="terminal"><div class="term-cab">${ICONO.terminal}<span>$ go run .</span></div><pre id="gd-sal">Compilando y ejecutando con Go…</pre></div>`;
+  z.previousElementSibling.scrollIntoView({ block: 'start', behavior: 'smooth' });   // que se vea la consola sin bajar
+  const r = await ejecutarGo(fuente), sal = $('#gd-sal');
+  if (!sal) return;
+  if (!r) {
+    sal.textContent = guardada !== undefined ? `${guardada}\n\n(sin conexión: salida que dio Go 1.27 al preparar el juego)` : 'Sin conexión: no se pudo ejecutar con Go.';
+    return;
+  }
+  const pie = r.compila ? `\n\nTerminó con código de salida ${r.codigoSalida} · Go 1.27 en go.dev` : '\n\nNo compila: Go muestra el error y no ejecuta el programa.';
+  sal.parentNode.classList.toggle('mal', !r.compila || r.codigoSalida !== 0);
+  const lineas = r.texto.split('\n');
+  sal.textContent = '';
+  for (const l of lineas) { sal.textContent += (sal.textContent ? '\n' : '') + l; await espera(110); }   // como una terminal
+  sal.textContent += pie;
 }
 async function responder(q, boton) {
   if (respondiendo) return;
@@ -377,21 +429,28 @@ async function responder(q, boton) {
   const bien = (await Cifra.huella(J.sal, q.id, texto)) === q.h;
   if (!(q.id in E.primer)) E.primer[q.id] = bien;
   $$('#dlg .op').forEach(b => { b.disabled = true; });
+  const practica = q.tipo === 'practica';
+  if (practica) {                              // la pieza elegida entra en el espacio del código
+    const h = $('#gd-hueco'); h.textContent = codigoDe(texto) || '(nada)'; h.classList.add(bien ? 'gd-ok' : 'gd-no');
+  }
+  // en la práctica, la consola ejecuta con Go el programa con la pieza elegida (bien o mal)
+  const zonaConsola = practica ? `<p class="gd-meta"><b>${bien ? 'Tu programa en Go:' : 'Así responde Go con tu código:'}</b></p><div id="gd-consola"></div>` : '';
   if (bien) {
     const r = await abrirCon(q.x, J.sal, q.id, texto);
     boton.classList.add('ok');
     E.hechas.push(q.id); E.cola = E.cola.filter(x => x !== q.id); E.puntos += 100;
-    const term = r.real && r.tipo ? `<div class="terminal${r.tipo === 'error' ? ' mal' : ''}"><div class="term-cab">${ICONO.terminal}<span>${r.tipo === 'error' ? 'Go responde:' : 'Go imprime:'}</span></div><pre>${esc(r.real)}</pre></div>` : '';
-    $('#retro').innerHTML = `<div class="retro ok">${gopherSvg({ ojos: 'feliz', boca: 'abierta' })}<div><h3>¡Correcto! +100 puntos</h3><p>${r.por}</p></div></div>${term}`;
+    $('#retro').innerHTML = `${zonaConsola}<div class="retro ok">${gopherSvg({ ojos: 'feliz', boca: 'abierta' })}<div><h3>¡Correcto! +100 puntos</h3><p>${r.por}</p></div></div>`;
     $('#dlgpie').innerHTML = `<button class="btn grande" id="seguir">Seguir: explota una fila ${ICONO.sig}</button>`;
     $('#seguir').onclick = () => { cerrarDlg(); premio(); };
+    if (practica) consola(q.fuente.replace(HUECO, codigoDe(texto)), r.real);
   } else {
     boton.classList.add('no');
     E.cola = E.cola.filter(x => x !== q.id).concat(q.id);      // vuelve al final de la fila de preguntas
-    $('#retro').innerHTML = `<div class="retro no">${gopherSvg({ ojos: 'x', boca: 'abierta' })}<div><h3>No es correcto</h3>
+    $('#retro').innerHTML = `${zonaConsola}<div class="retro no">${gopherSvg({ ojos: 'x', boca: 'abierta' })}<div><h3>No es correcto</h3>
         <p><b>Pista:</b> ${q.pista}</p><p>Esta pregunta volverá en otro dulce con ?.</p></div></div>`;
     $('#dlgpie').innerHTML = `<button class="btn grande" id="seguir">Seguir jugando ${ICONO.sig}</button>`;
     $('#seguir').onclick = () => { cerrarDlg(); despues(); };
+    if (practica) consola(q.fuente.replace(HUECO, codigoDe(texto)));
   }
   guardar(); hud();
   respondiendo = false;
@@ -429,6 +488,8 @@ function finNivel() {
 
 /* ---------------- informe ---------------- */
 const nivelTema = p => p >= 80 ? 'Lo domina' : p >= 50 ? 'En proceso' : 'Debe repasarlo';
+const porTipo = () => ({ teoria: J.preguntas.filter(q => q.tipo === 'teoria' && E.primer[q.id] === true).length,
+  practica: J.preguntas.filter(q => q.tipo === 'practica' && E.primer[q.id] === true).length });
 function porTema() {
   return J.temas.map(t => {
     const qs = J.preguntas.filter(q => q.tema === t), bien = qs.filter(q => E.primer[q.id] === true).length;
@@ -437,9 +498,10 @@ function porTema() {
 }
 function informe() {
   if (!E.completo) { juego(); return; }
-  const temas = porTema(), a = aciertosPrimer(), p = Math.round(a / TOTAL * 100);
+  const temas = porTema(), a = aciertosPrimer(), p = Math.round(a / TOTAL * 100), tp = porTipo();
   pintar(`<div class="card"><h2>${ICONO.informe} Informe</h2>
       <p><b>${esc(E.nombre)} ${esc(E.apellido)}</b> · ${a} de ${TOTAL} preguntas acertadas al primer intento (${p} %) · ${E.puntos} puntos en ${E.movs} jugadas</p>
+      <p>Al primer intento: <b>teoría ${tp.teoria} de 6</b> · <b>práctica ${tp.practica} de 6</b></p>
       <div class="temas">${temas.map(x => `<div class="tema"><b>${esc(x.tema)}</b><div class="barra"><i class="${x.p >= 80 ? '' : x.p >= 50 ? 'medio' : 'bajo'}" style="width:${x.p}%"></i></div>
         <span>${x.bien}/${x.total}</span><small>${nivelTema(x.p)}</small></div>`).join('')}</div>
       <div class="fila-btn no-imprimir"><button class="btn grande" id="cert">${ICONO.trofeo} Ver mi certificado</button></div>
@@ -450,7 +512,7 @@ function informe() {
   $('#ini').onclick = inicio;
   $('#imprimir').onclick = () => window.print();
   $('#copiar').onclick = async () => {
-    const txt = `Gopher Dulce · ${E.nombre} ${E.apellido}\n${a} de ${TOTAL} al primer intento (${p} %) · ${E.puntos} puntos\n` +
+    const txt = `Gopher Dulce · ${E.nombre} ${E.apellido}\n${a} de ${TOTAL} al primer intento (${p} %) · teoría ${tp.teoria}/6 · práctica ${tp.practica}/6 · ${E.puntos} puntos\n` +
       temas.map(x => `${x.tema}: ${x.bien}/${x.total} · ${nivelTema(x.p)}`).join('\n');
     try { await navigator.clipboard.writeText(txt); $('#aviso').style.color = 'var(--bien)'; $('#aviso').textContent = 'Informe copiado.'; }
     catch { $('#aviso').textContent = 'No se pudo copiar; usa «Imprimir».'; }
@@ -498,7 +560,8 @@ async function dibujarCertificado() {
   centro(nombre, 498, `800 ${tam}px Poppins, sans-serif`, MAG);
   x.strokeStyle = DORADO; x.lineWidth = 3; x.beginPath(); x.moveTo(W / 2 - 420, 528); x.lineTo(W / 2 + 420, 528); x.stroke();
   centro('por completar los 2 niveles de Gopher Dulce: encapsulación y manejo de errores en Go', 588, '600 29px Poppins, sans-serif', AZUL);
-  centro('Programación Orientada a Objetos · semanas 9 y 10', 630, '400 24px Poppins, sans-serif', GRIS);
+  const tp = porTipo();
+  centro(`Programación Orientada a Objetos · semanas 9 y 10 · teoría ${tp.teoria} de 6 y práctica ${tp.practica} de 6 al primer intento`, 630, '400 22px Poppins, sans-serif', GRIS);
   const a = aciertosPrimer(), p = Math.round(a / TOTAL * 100);
   [[`${a} de ${TOTAL}`, 'al primer intento'], [`${p} %`, 'de logro'], [rango(p), 'nivel alcanzado']].forEach(([v, et], i) => {
     const cxx = W / 2 + (i - 1) * 420, y = 668;
