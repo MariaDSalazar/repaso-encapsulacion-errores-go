@@ -369,7 +369,7 @@ function reto(id) {
   const L = J.lecciones[q.tema];
   abrirDlg(`<span class="chip">${ICONO.estrella} Aprende · ${esc(q.tema)}</span>
       <h3 class="pregunta" id="dlg-titulo">${esc(q.tema)}</h3>
-      <div class="gd-leccion"><p>${L.idea}</p><pre class="go">${resaltar(L.codigo)}</pre>
+      <div class="gd-leccion"><p>${L.idea}</p><pre class="go" translate="no">${resaltar(L.codigo)}</pre>
       <p class="gd-real"><b>En el mundo real:</b> ${L.real}</p></div>`,
     `<button class="btn grande" id="aprendi">¡Entendido! Ir a la pregunta ${ICONO.sig}</button>`);
   $('#aprendi').onclick = () => { E.vistas.push(q.tema); guardar(); pregunta(id); };
@@ -379,12 +379,12 @@ const HUECO = '____';
 const codigoDe = op => op === '(nada)' ? '' : op;
 function pregunta(id) {
   const q = Q[id], practica = q.tipo === 'practica';
-  const codigo = practica ? `<pre class="go" id="gd-codigo">${resaltar(q.codigo).replace(HUECO, '<span class="gd-hueco" id="gd-hueco">____</span>')}</pre>` : '';
+  const codigo = practica ? `<pre class="go" id="gd-codigo" translate="no">${resaltar(q.codigo).replace(HUECO, '<span class="gd-hueco" id="gd-hueco">____</span>')}</pre>` : '';
   const meta = practica ? `<p class="gd-meta"><b>Meta:</b> el programa debe imprimir</p><pre class="gd-salida-meta">${esc(q.meta)}</pre>` : '';
   abrirDlg(`<span class="chip${practica ? ' gd-chip-practica' : ''}">${practica ? 'Práctica' : 'Teoría'} · ${esc(q.tema)}</span> <span class="gd-cuantas">Nivel ${E.nivel} · pregunta ${hechasNivel() + 1} de ${POR_NIVEL}</span>
       <h3 class="pregunta" id="dlg-titulo">${q.enunciado}</h3>${codigo}${meta}
       ${practica ? '<p class="gd-meta"><b>Elige lo que va en el espacio:</b></p>' : ''}
-      <div class="opciones">${q.opciones.map((o, i) => `<button class="op${practica ? ' cod' : ''}" data-i="${i}">${esc(o)}</button>`).join('')}</div>
+      <div class="opciones">${q.opciones.map((o, i) => `<button class="op${practica ? ' cod' : ''}"${practica ? ' translate="no"' : ''} data-i="${i}">${esc(o)}</button>`).join('')}</div>
       <div id="retro"></div>`, '');
   $$('#dlg .op').forEach(b => { b.onclick = () => responder(q, b); });
   $$('#dlg .op')[0].focus();
